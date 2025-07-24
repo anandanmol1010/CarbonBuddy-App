@@ -1,9 +1,12 @@
 package com.app.carbonbuddy.ui.screens
 
+import android.Manifest
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -31,14 +35,52 @@ import com.app.carbonbuddy.viewmodel.ShoppingItem
 @Composable
 fun ShoppingTrackerScreen() {
     val context = LocalContext.current
-    val viewModel: ShoppingEstimatorViewModel = viewModel { ShoppingEstimatorViewModel(context) }
+    val viewModel: ShoppingEstimatorViewModel = viewModel {
+        ShoppingEstimatorViewModel(context)
+    }
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Store temp URI for camera
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // Camera launcher (defined first so it can be referenced by permission launcher)
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraUri != null) {
+            // Photo was taken successfully, now process it
+            viewModel.onImageSelected(tempCameraUri!!)
+            tempCameraUri = null
+        } else {
+            // Photo was not taken or failed
+            tempCameraUri = null
+        }
+    }
+    
+    // Camera permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, launch camera
+            val tempFile = java.io.File.createTempFile("camera_", ".jpg", context.cacheDir)
+            val tempUri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                tempFile
+            )
+            tempCameraUri = tempUri
+            cameraLauncher.launch(tempUri)
+        }
+    }
     
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { viewModel.onImageSelected(it) }
+        uri?.let {
+            viewModel.onImageSelected(it)
+        }
     }
     
     LazyColumn(
@@ -46,7 +88,11 @@ fun ShoppingTrackerScreen() {
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFFE8F5E9), Color(0xFFB3E5FC))
+                    colors = listOf(
+                        Color(0xFFE8F5E9), // Light green
+                        Color(0xFFF1F8E9), // Very light green
+                        Color(0xFFE0F2F1)  // Light teal
+                    )
                 )
             )
             .padding(16.dp)
@@ -64,18 +110,10 @@ fun ShoppingTrackerScreen() {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(vertical = 24.dp)
             )
-            
-            Text(
-                "Upload receipt or enter items manually for carbon footprint analysis",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
         }
         
         item {
-            // Upload Section
+            // Receipt Upload Section
             Card(
                 shape = RoundedCornerShape(16.dp),
                 elevation = CardDefaults.cardElevation(4.dp),
@@ -86,57 +124,115 @@ fun ShoppingTrackerScreen() {
                     modifier = Modifier.padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Text(
+                        "🧾 Upload Your Receipt",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF1976D2),
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Image preview or capture area
                     if (uiState.selectedImageUri != null) {
                         AsyncImage(
                             model = uiState.selectedImageUri,
                             contentDescription = "Selected receipt",
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp),
+                                .height(200.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(12.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(150.dp)
+                                .border(
+                                    2.dp,
+                                    Color(0xFF1976D2),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { 
+                                    // Request camera permission first
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                Icons.Default.Receipt,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = Color(0xFF1976D2)
-                            )
-                            Text(
-                                "Tap to upload receipt image",
-                                color = Color(0xFF1976D2),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    Icons.Default.CameraAlt,
+                                    contentDescription = "Camera",
+                                    tint = Color(0xFF1976D2),
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Tap to capture receipt",
+                                    color = Color(0xFF1976D2),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "or choose from gallery below",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Change image button (only show when image is selected)
+                    if (uiState.selectedImageUri != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { 
+                                viewModel.resetState()
+                                imagePickerLauncher.launch("image/*")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Choose Different Image")
                         }
                     }
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Upload buttons
+                    // Upload and input options
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Button(
                             onClick = { 
                                 viewModel.resetState()
                                 imagePickerLauncher.launch("image/*")
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            )
                         ) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Gallery")
                         }
                         
                         OutlinedButton(
                             onClick = { viewModel.handleManualInputClick() },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF4CAF50)
+                            )
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Manual")
                         }
                     }
@@ -476,11 +572,12 @@ fun ShoppingEmissionResultCard(
                 fontWeight = FontWeight.Bold
             )
             
-            items.forEach { item ->
-                Text(
-                    "${item.icon} ${item.name}: ${item.co2Emission} kg CO₂",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Column {
+                items.forEach { item ->
+                    ShoppingItemRow(item)
+                }
             }
         }
     }

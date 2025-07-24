@@ -52,7 +52,7 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
     
     // TODO: Replace with secure API key management
     private val geminiModel = GenerativeModel(
-        modelName = "gemini-2.0-flash-exp",
+        modelName = "gemini-2.5-pro",
         apiKey = "AIzaSyA83gnEatNdJbm3otgVvyNOvNqV9_I9bG8" // Replace with your actual API key
     )
     
@@ -106,18 +106,43 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
     
     private suspend fun extractTextFromImage(uri: Uri): String {
         return try {
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
-            } else {
-                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            Log.d("Shopping Estimator", "Starting text extraction from URI: $uri")
+            
+            // Check if file exists and has content
+            val inputStream = context.contentResolver.openInputStream(uri)
+            if (inputStream == null || inputStream.available() == 0) {
+                inputStream?.close()
+                throw Exception("Image file is empty or cannot be read")
             }
+            inputStream.close()
+            
+            val bitmap = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+            } catch (e: Exception) {
+                Log.e("Shopping Estimator", "Failed to decode image: ${e.message}")
+                // Try alternative method
+                val inputStream2 = context.contentResolver.openInputStream(uri)
+                android.graphics.BitmapFactory.decodeStream(inputStream2).also {
+                    inputStream2?.close()
+                    if (it == null) throw Exception("Could not decode image from any method")
+                }
+            }
+            
+            Log.d("Shopping Estimator", "Bitmap created successfully: ${bitmap.width}x${bitmap.height}")
             
             val image = InputImage.fromBitmap(bitmap, 0)
             val result = textRecognizer.process(image).await()
+            
+            Log.d("Shopping Estimator", "Text extraction completed. Text length: ${result.text.length}")
             result.text
         } catch (e: Exception) {
             Log.e("Shopping Estimator", "Error extracting text from image: ${e.message}", e)
-            throw e
+            throw Exception("Failed to extract text from image: ${e.message}")
         }
     }
     

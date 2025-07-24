@@ -159,13 +159,35 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
     
     private suspend fun extractTextFromImage(uri: Uri): String {
         return try {
-            // Convert URI to Bitmap
-            val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
-            } else {
-                @Suppress("DEPRECATION")
-                MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+            Log.d("Anmol Anand", "Starting text extraction from URI: $uri")
+            
+            // Check if file exists and has content
+            val inputStream = context.contentResolver.openInputStream(uri)
+            if (inputStream == null || inputStream.available() == 0) {
+                inputStream?.close()
+                throw Exception("Image file is empty or cannot be read")
             }
+            inputStream.close()
+            
+            // Convert URI to Bitmap with fallback methods
+            val bitmap = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri))
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+            } catch (e: Exception) {
+                Log.e("Anmol Anand", "Failed to decode image with primary method: ${e.message}")
+                // Try alternative method
+                val inputStream2 = context.contentResolver.openInputStream(uri)
+                android.graphics.BitmapFactory.decodeStream(inputStream2).also {
+                    inputStream2?.close()
+                    if (it == null) throw Exception("Could not decode image from any method")
+                }
+            }
+            
+            Log.d("Anmol Anand", "Bitmap created successfully: ${bitmap.width}x${bitmap.height}")
             
             // Create InputImage from bitmap
             val image = InputImage.fromBitmap(bitmap, 0)
@@ -178,12 +200,13 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
             
             Log.d("Anmol Anand", "ML Kit processing successful")
             Log.d("Anmol Anand", "Raw extracted text: $extractedText")
+            Log.d("Anmol Anand", "Text extraction completed. Text length: ${extractedText.length}")
             
             extractedText
             
         } catch (e: Exception) {
             Log.e("Anmol Anand", "Error in ML Kit text extraction: ${e.message}", e)
-            throw e
+            throw Exception("Failed to extract text from image: ${e.message}")
         }
     }
     

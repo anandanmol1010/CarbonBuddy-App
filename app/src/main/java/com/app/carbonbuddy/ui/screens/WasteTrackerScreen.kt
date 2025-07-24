@@ -41,7 +41,11 @@ fun WasteTrackerScreen(viewModel: WasteTrackerViewModel) {
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFFE8F5E9), Color(0xFFB3E5FC))
+                    colors = listOf(
+                        Color(0xFFE8F5E9), // Light green
+                        Color(0xFFF1F8E9), // Very light green
+                        Color(0xFFE0F2F1)  // Light teal
+                    )
                 )
             )
             .padding(16.dp)

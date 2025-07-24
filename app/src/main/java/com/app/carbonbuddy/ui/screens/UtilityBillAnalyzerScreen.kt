@@ -1,5 +1,6 @@
 package com.app.carbonbuddy.ui.screens
 
+import android.Manifest
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,9 +33,46 @@ import com.app.carbonbuddy.viewmodel.BillType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecycle.viewmodel.compose.viewModel()) {
-    val uiState by viewModel.uiState.collectAsState()
+fun UtilityBillAnalyzerScreen() {
     val context = LocalContext.current
+    val viewModel: BillAnalyzerViewModel = androidx.lifecycle.viewmodel.compose.viewModel {
+        BillAnalyzerViewModel(context)
+    }
+    val uiState by viewModel.uiState.collectAsState()
+    
+    // Store temp URI for camera
+    var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+    
+    // Camera launcher (defined first so it can be referenced by permission launcher)
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempCameraUri != null) {
+            // Photo was taken successfully, now process it
+            viewModel.onImageSelected(tempCameraUri!!)
+            tempCameraUri = null
+        } else {
+            // Photo was not taken or failed
+            tempCameraUri = null
+        }
+    }
+    
+    // Camera permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, launch camera
+            val tempFile = java.io.File.createTempFile("camera_", ".jpg", context.cacheDir)
+            val tempUri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                tempFile
+            )
+            tempCameraUri = tempUri
+            cameraLauncher.launch(tempUri)
+        }
+    }
     
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
@@ -45,23 +83,16 @@ fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecy
         }
     }
     
-    // Camera launcher
-    val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            uiState.selectedImageUri?.let {
-                viewModel.onImageSelected(it)
-            }
-        }
-    }
-    
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFFE8F5E9), Color(0xFFB3E5FC))
+                    colors = listOf(
+                        Color(0xFFE8F5E9), // Light green
+                        Color(0xFFF1F8E9), // Very light green
+                        Color(0xFFE0F2F1)  // Light teal
+                    )
                 )
             )
             .padding(16.dp)
@@ -71,7 +102,7 @@ fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecy
     ) {
         item {
             Text(
-                "Smart Bill Analyzer",
+                "💡 Smart Bill Analyzer",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF388E3C)
@@ -100,7 +131,7 @@ fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecy
                     
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Image preview or upload area
+                    // Image preview or capture area
                     if (uiState.selectedImageUri != null) {
                         AsyncImage(
                             model = uiState.selectedImageUri,
@@ -108,56 +139,86 @@ fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecy
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(200.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, Color.Gray, RoundedCornerShape(8.dp)),
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray, RoundedCornerShape(12.dp)),
                             contentScale = ContentScale.Crop
                         )
                     } else {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(120.dp)
+                                .height(150.dp)
                                 .border(
                                     2.dp,
                                     Color(0xFF1976D2),
-                                    RoundedCornerShape(8.dp)
+                                    RoundedCornerShape(12.dp)
                                 )
-                                .clickable { imagePickerLauncher.launch("image/*") },
+                                .clickable { 
+                                    // Request camera permission first
+                                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Icon(
-                                    Icons.Default.CloudUpload,
-                                    contentDescription = "Upload",
+                                    Icons.Default.CameraAlt,
+                                    contentDescription = "Camera",
                                     tint = Color(0xFF1976D2),
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Tap to capture bill",
+                                    color = Color(0xFF1976D2),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
                                 )
                                 Text(
-                                    "Tap to upload bill image",
-                                    color = Color(0xFF1976D2),
-                                    style = MaterialTheme.typography.bodyMedium
+                                    "or choose from gallery below",
+                                    color = Color.Gray,
+                                    style = MaterialTheme.typography.bodySmall
                                 )
                             }
                         }
                     }
                     
+                    // Change image button (only show when image is selected)
+                    if (uiState.selectedImageUri != null) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = { 
+                                viewModel.resetState()
+                                imagePickerLauncher.launch("image/*")
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Choose Different Image")
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(16.dp))
                     
-                    // Upload buttons
+                    // Upload and input options
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Button(
                             onClick = { 
-                                viewModel.resetState() // Clear previous data
+                                viewModel.resetState()
                                 imagePickerLauncher.launch("image/*")
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF4CAF50)
+                            )
                         ) {
-                            Icon(Icons.Default.PhotoLibrary, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Gallery")
                         }
                         
@@ -165,10 +226,13 @@ fun UtilityBillAnalyzerScreen(viewModel: BillAnalyzerViewModel = androidx.lifecy
                             onClick = { 
                                 viewModel.handleManualInputClick()
                             },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF4CAF50)
+                            )
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null)
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text("Manual")
                         }
                     }
