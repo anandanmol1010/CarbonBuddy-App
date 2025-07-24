@@ -24,6 +24,7 @@ import androidx.navigation.compose.rememberNavController
 import com.app.carbonbuddy.ui.screens.*
 import com.app.carbonbuddy.ui.screens.ShoppingTrackerScreen
 import com.app.carbonbuddy.viewmodel.WasteTrackerViewModel
+import com.app.carbonbuddy.viewmodel.BillAnalyzerViewModel
 
 sealed class Screen(val route: String, val label: String, val icon: String) {
     object Home : Screen("home_dashboard", "Home", "🏠")
@@ -51,7 +52,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             CarbonBuddyTheme {
                 val navController = rememberNavController()
-                val viewModel = remember { WasteTrackerViewModel() }
+                val wasteViewModel = remember { WasteTrackerViewModel() }
+                val billViewModel = remember { BillAnalyzerViewModel(this@MainActivity) }
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = { BottomNavBar(navController) }
@@ -64,9 +66,9 @@ class MainActivity : ComponentActivity() {
                         composable(Screen.Home.route) { HomeDashboardScreen() }
                         composable(Screen.Transport.route) { TransportTrackerScreen() }
                         composable(Screen.Diet.route) { DietLoggerScreen() }
-                        composable(Screen.Utility.route) { UtilityBillAnalyzerScreen() }
+                        composable(Screen.Utility.route) { UtilityBillAnalyzerScreen(billViewModel) }
                         composable(Screen.Waste.route) { 
-                            WasteTrackerScreen(viewModel = viewModel)
+                            WasteTrackerScreen(viewModel = wasteViewModel)
                         }
                         composable(Screen.Shopping.route) { ShoppingTrackerScreen() }
                         composable(Screen.Onboarding.route) { OnboardingScreen(onFinish = { /* TODO: Navigate to Home */ }) }
