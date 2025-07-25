@@ -82,7 +82,6 @@ class MainActivity : ComponentActivity() {
                             WasteManagementScreen(viewModel = wasteManagementViewModel)
                         }
                         composable(Screen.Shopping.route) { ShoppingTrackerScreen() }
-                        composable(Screen.Onboarding.route) { OnboardingScreen(onFinish = { /* TODO: Navigate to Home */ }) }
                     }
                 }
             }

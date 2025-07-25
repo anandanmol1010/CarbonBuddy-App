@@ -36,7 +36,6 @@ class DietLoggerViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(DietLoggerUiState())
     val uiState: StateFlow<DietLoggerUiState> = _uiState.asStateFlow()
     
-    // TODO: Replace with secure API key management
     private val geminiModel = GenerativeModel(
         modelName = "gemini-2.5-pro",
         apiKey = "AIzaSyA83gnEatNdJbm3otgVvyNOvNqV9_I9bG8" // Replace with your actual API key

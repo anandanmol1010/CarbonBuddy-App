@@ -17,13 +17,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.app.carbonbuddy.viewmodel.TransportTrackerViewModel
 
 @Composable
 fun HomeDashboardScreen() {
+    val context = LocalContext.current
+    val transportViewModel: TransportTrackerViewModel = viewModel { TransportTrackerViewModel(context) }
+    val transportUiState by transportViewModel.uiState.collectAsState()
+    
+    // Load transport stats when screen opens
+    LaunchedEffect(Unit) {
+        transportViewModel.loadStats()
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -54,13 +65,13 @@ fun HomeDashboardScreen() {
         
         item {
             // Quick Stats
-            QuickStatsRow()
+            QuickStatsRow(transportUiState.stats)
             Spacer(modifier = Modifier.height(24.dp))
         }
         
         item {
             // Categories Section
-            CategoriesSection()
+            CategoriesSection(transportUiState.stats)
         }
     }
 }
@@ -204,7 +215,7 @@ fun EcoScoreDashboard() {
 }
 
 @Composable
-fun QuickStatsRow() {
+fun QuickStatsRow(transportStats: com.app.carbonbuddy.data.TransportStats) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -212,7 +223,7 @@ fun QuickStatsRow() {
         QuickStatCard(
             icon = "📊",
             title = "Today",
-            value = "5.8 kg",
+            value = "${String.format("%.1f", transportStats.todayEmission)} kg",
             subtitle = "CO₂ emitted",
             color = Color(0xFF4CAF50),
             modifier = Modifier.weight(1f)
@@ -221,7 +232,7 @@ fun QuickStatsRow() {
         QuickStatCard(
             icon = "📅",
             title = "Monthly",
-            value = "127.5 kg",
+            value = "${String.format("%.1f", transportStats.monthlyEmission)} kg",
             subtitle = "CO₂ emitted",
             color = Color(0xFFFF9800),
             modifier = Modifier.weight(1f)
@@ -280,7 +291,7 @@ fun QuickStatCard(
 }
 
 @Composable
-fun CategoriesSection() {
+fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats) {
     Column {
         Text(
             "📈 Emissions by Category",
@@ -302,8 +313,8 @@ fun CategoriesSection() {
                 EnhancedCategoryCard(
                     category = "Transport",
                     icon = "🚗",
-                    emission = "2.3 kg CO₂",
-                    percentage = 35,
+                    emission = "${String.format("%.1f", transportStats.monthlyEmission)} kg CO₂",
+                    percentage = 35, // You might want to calculate this dynamically
                     color = Color(0xFFFF5722),
                     modifier = Modifier.weight(1f)
                 )

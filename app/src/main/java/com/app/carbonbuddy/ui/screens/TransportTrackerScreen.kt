@@ -14,16 +14,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.app.carbonbuddy.viewmodel.TransportTrackerViewModel
+import android.widget.Toast
 
 @Composable
 fun TransportTrackerScreen() {
-    var selectedMode by remember { mutableStateOf("Car") }
-    var distance by remember { mutableStateOf("") }
-    var result by remember { mutableStateOf<Double?>(null) }
+    val context = LocalContext.current
+    val viewModel: TransportTrackerViewModel = viewModel { TransportTrackerViewModel(context) }
+    val uiState by viewModel.uiState.collectAsState()
     
     // Transport modes with icons and emission factors
     val transportModes = listOf(
@@ -33,7 +37,7 @@ fun TransportTrackerScreen() {
         TransportMode("🚆", "Train", "Rail Transport", 0.041, Color(0xFF9C27B0))
     )
     
-    val selectedTransport = transportModes.find { it.name == selectedMode } ?: transportModes[0]
+    val selectedTransport = transportModes.find { it.name == uiState.selectedMode } ?: transportModes[0]
     
     LazyColumn(
         modifier = Modifier
@@ -68,8 +72,8 @@ fun TransportTrackerScreen() {
             // Transport Mode Selection
             TransportModeSelector(
                 transportModes = transportModes,
-                selectedMode = selectedMode,
-                onModeSelected = { selectedMode = it }
+                selectedMode = uiState.selectedMode,
+                onModeSelected = viewModel::selectMode
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -78,24 +82,22 @@ fun TransportTrackerScreen() {
         item {
             // Distance Input
             DistanceInputCard(
-                distance = distance,
-                onDistanceChange = { distance = it },
+                distance = uiState.distance,
+                onDistanceChange = viewModel::updateDistance,
                 selectedTransport = selectedTransport,
-                onCalculate = {
-                    val dist = distance.toDoubleOrNull() ?: 0.0
-                    result = dist * selectedTransport.emissionFactor
-                }
+                onCalculate = viewModel::calculateEmission,
+                isCalculating = uiState.isCalculating
             )
             
             Spacer(modifier = Modifier.height(24.dp))
         }
         
         // Results
-        result?.let { emission ->
+        uiState.result?.let { emission ->
             item {
                 EmissionResultCard(
                     emission = emission,
-                    distance = distance.toDoubleOrNull() ?: 0.0,
+                    distance = uiState.distance.toDoubleOrNull() ?: 0.0,
                     transportMode = selectedTransport
                 )
                 
@@ -105,6 +107,12 @@ fun TransportTrackerScreen() {
             item {
                 EcoTipsCard(transportMode = selectedTransport)
             }
+        }
+        
+        // Success Message
+        if (uiState.showSuccessMessage) {
+            Toast.makeText(context, "Data saved", Toast.LENGTH_SHORT).show()
+            viewModel.dismissSuccessMessage()
         }
     }
 }
@@ -229,7 +237,8 @@ fun DistanceInputCard(
     distance: String,
     onDistanceChange: (String) -> Unit,
     selectedTransport: TransportMode,
-    onCalculate: () -> Unit
+    onCalculate: () -> Unit,
+    isCalculating: Boolean = false
 ) {
     Card(
         shape = RoundedCornerShape(16.dp),
@@ -271,23 +280,38 @@ fun DistanceInputCard(
             
             Button(
                 onClick = onCalculate,
-                enabled = distance.toDoubleOrNull() != null && distance.toDouble() > 0,
-                modifier = Modifier.fillMaxWidth(),
+                enabled = distance.isNotBlank() && !isCalculating,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color(0xFF4CAF50)
                 ),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Icon(
-                    Icons.Default.Calculate,
-                    contentDescription = "Calculate",
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "Calculate Carbon Footprint",
-                    fontWeight = FontWeight.Medium
-                )
+                if (isCalculating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Calculating...",
+                        fontWeight = FontWeight.Medium
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Calculate,
+                        contentDescription = "Calculate",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Calculate Carbon Footprint",
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
