@@ -6,13 +6,17 @@ import androidx.room.RoomDatabase
 import android.content.Context
 
 @Database(
-    entities = [TransportEntry::class],
-    version = 2,
+    entities = [TransportEntry::class, DietEntry::class, ShoppingEntry::class, BillsEntry::class, WasteEntry::class],
+    version = 6,
     exportSchema = false
 )
 abstract class CarbonDatabase : RoomDatabase() {
     
     abstract fun transportDao(): TransportDao
+    abstract fun dietDao(): DietDao
+    abstract fun shoppingDao(): ShoppingDao
+    abstract fun billsDao(): BillsDao
+    abstract fun wasteDao(): WasteDao
     
     companion object {
         @Volatile

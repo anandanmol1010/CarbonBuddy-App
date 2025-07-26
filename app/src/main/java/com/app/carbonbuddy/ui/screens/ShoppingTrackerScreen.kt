@@ -30,6 +30,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.app.carbonbuddy.viewmodel.ShoppingEstimatorViewModel
 import com.app.carbonbuddy.viewmodel.ShoppingItem
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,6 +40,12 @@ fun ShoppingTrackerScreen() {
         ShoppingEstimatorViewModel(context)
     }
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Success Message Toast
+    if (uiState.showSuccessMessage) {
+        Toast.makeText(context, "Shopping data saved successfully!", Toast.LENGTH_SHORT).show()
+        viewModel.dismissSuccessMessage()
+    }
     
     // Store temp URI for camera
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }

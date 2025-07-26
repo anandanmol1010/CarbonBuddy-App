@@ -24,16 +24,34 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.carbonbuddy.viewmodel.TransportTrackerViewModel
+import com.app.carbonbuddy.viewmodel.DietLoggerViewModel
+import com.app.carbonbuddy.viewmodel.ShoppingEstimatorViewModel
+import com.app.carbonbuddy.viewmodel.BillAnalyzerViewModel
+import com.app.carbonbuddy.viewmodel.WasteManagementViewModel
+import com.app.carbonbuddy.utils.EcoScoreCalculator
+import kotlin.math.ceil
 
 @Composable
 fun HomeDashboardScreen() {
     val context = LocalContext.current
     val transportViewModel: TransportTrackerViewModel = viewModel { TransportTrackerViewModel(context) }
+    val dietViewModel: DietLoggerViewModel = viewModel { DietLoggerViewModel(context) }
+    val shoppingViewModel: ShoppingEstimatorViewModel = viewModel { ShoppingEstimatorViewModel(context) }
+    val billsViewModel: BillAnalyzerViewModel = viewModel { BillAnalyzerViewModel(context) }
+    val wasteViewModel: WasteManagementViewModel = viewModel { WasteManagementViewModel(context) }
     val transportUiState by transportViewModel.uiState.collectAsState()
+    val dietUiState by dietViewModel.uiState.collectAsState()
+    val shoppingUiState by shoppingViewModel.uiState.collectAsState()
+    val billsUiState by billsViewModel.uiState.collectAsState()
+    val wasteUiState by wasteViewModel.uiState.collectAsState()
     
-    // Load transport stats when screen opens
+    // Load stats when screen opens
     LaunchedEffect(Unit) {
         transportViewModel.loadStats()
+        dietViewModel.loadStats()
+        shoppingViewModel.loadStats()
+        billsViewModel.loadStats()
+        wasteViewModel.loadStats()
     }
     LazyColumn(
         modifier = Modifier
@@ -48,7 +66,8 @@ fun HomeDashboardScreen() {
                 )
             )
             .padding(16.dp)
-            .padding(bottom = 90.dp),
+            .padding(bottom = 90.dp)
+            .padding(top = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         item {
@@ -57,21 +76,26 @@ fun HomeDashboardScreen() {
             Spacer(modifier = Modifier.height(24.dp))
         }
         
+//        item {
+//            // EcoScore Dashboard
+//            EcoScoreDashboard()
+//            Spacer(modifier = Modifier.height(24.dp))
+//        }
         item {
-            // EcoScore Dashboard
-            EcoScoreDashboard()
+            // EcoScore Section
+            EcoScoreSection(transportUiState.stats, dietUiState.stats, shoppingUiState.stats, billsUiState.stats, wasteUiState.stats)
             Spacer(modifier = Modifier.height(24.dp))
         }
         
         item {
             // Quick Stats
-            QuickStatsRow(transportUiState.stats)
+            QuickStatsRow(transportUiState.stats, dietUiState.stats, shoppingUiState.stats, billsUiState.stats, wasteUiState.stats)
             Spacer(modifier = Modifier.height(24.dp))
         }
-        
+
         item {
             // Categories Section
-            CategoriesSection(transportUiState.stats)
+            CategoriesSection(transportUiState.stats, dietUiState.stats, shoppingUiState.stats, billsUiState.stats, wasteUiState.stats)
         }
     }
 }
@@ -215,7 +239,10 @@ fun EcoScoreDashboard() {
 }
 
 @Composable
-fun QuickStatsRow(transportStats: com.app.carbonbuddy.data.TransportStats) {
+fun QuickStatsRow(transportStats: com.app.carbonbuddy.data.TransportStats, dietStats: com.app.carbonbuddy.data.DietStats, shoppingStats: com.app.carbonbuddy.data.ShoppingStats, billsStats: com.app.carbonbuddy.data.BillsStats, wasteStats: com.app.carbonbuddy.data.WasteStats) {
+    val todayTotal = transportStats.todayEmission + dietStats.todayEmission + shoppingStats.todayEmission + billsStats.todayEmission + wasteStats.todayNetImpact
+    val monthlyTotal = transportStats.monthlyEmission + dietStats.monthlyEmission + shoppingStats.monthlyEmission + billsStats.monthlyEmission + wasteStats.monthlyNetImpact
+    
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -223,7 +250,7 @@ fun QuickStatsRow(transportStats: com.app.carbonbuddy.data.TransportStats) {
         QuickStatCard(
             icon = "📊",
             title = "Today",
-            value = "${String.format("%.1f", transportStats.todayEmission)} kg",
+            value = "${String.format("%.1f", todayTotal)} kg",
             subtitle = "CO₂ emitted",
             color = Color(0xFF4CAF50),
             modifier = Modifier.weight(1f)
@@ -232,7 +259,7 @@ fun QuickStatsRow(transportStats: com.app.carbonbuddy.data.TransportStats) {
         QuickStatCard(
             icon = "📅",
             title = "Monthly",
-            value = "${String.format("%.1f", transportStats.monthlyEmission)} kg",
+            value = "${String.format("%.1f", monthlyTotal)} kg",
             subtitle = "CO₂ emitted",
             color = Color(0xFFFF9800),
             modifier = Modifier.weight(1f)
@@ -291,7 +318,15 @@ fun QuickStatCard(
 }
 
 @Composable
-fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats) {
+fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats, dietStats: com.app.carbonbuddy.data.DietStats, shoppingStats: com.app.carbonbuddy.data.ShoppingStats, billsStats: com.app.carbonbuddy.data.BillsStats, wasteStats: com.app.carbonbuddy.data.WasteStats) {
+    // Calculate total emissions and percentages
+    val totalEmissions = transportStats.monthlyEmission + dietStats.monthlyEmission + shoppingStats.monthlyEmission + billsStats.monthlyEmission
+    
+    val transportPercentage = if (totalEmissions > 0) ceil((transportStats.monthlyEmission / totalEmissions) * 100).toInt() else 0
+    val dietPercentage = if (totalEmissions > 0) ceil((dietStats.monthlyEmission / totalEmissions) * 100).toInt() else 0
+    val shoppingPercentage = if (totalEmissions > 0) ceil((shoppingStats.monthlyEmission / totalEmissions) * 100).toInt() else 0
+    val billsPercentage = if (totalEmissions > 0) ceil((billsStats.monthlyEmission / totalEmissions) * 100).toInt() else 0
+    
     Column {
         Text(
             "📈 Emissions by Category",
@@ -314,15 +349,17 @@ fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats) {
                     category = "Transport",
                     icon = "🚗",
                     emission = "${String.format("%.1f", transportStats.monthlyEmission)} kg CO₂",
-                    percentage = 35, // You might want to calculate this dynamically
+                    percentage = transportPercentage,
+                    actualEmission = transportStats.monthlyEmission,
                     color = Color(0xFFFF5722),
                     modifier = Modifier.weight(1f)
                 )
                 EnhancedCategoryCard(
                     category = "Diet",
                     icon = "🥗",
-                    emission = "1.5 kg CO₂",
-                    percentage = 23,
+                    emission = "${String.format("%.1f", dietStats.monthlyEmission)} kg CO₂",
+                    percentage = dietPercentage,
+                    actualEmission = dietStats.monthlyEmission,
                     color = Color(0xFF4CAF50),
                     modifier = Modifier.weight(1f)
                 )
@@ -336,16 +373,18 @@ fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats) {
                 EnhancedCategoryCard(
                     category = "Bills",
                     icon = "💡",
-                    emission = "1.2 kg CO₂",
-                    percentage = 18,
+                    emission = "${String.format("%.1f", billsStats.monthlyEmission)} kg CO₂",
+                    percentage = billsPercentage,
+                    actualEmission = billsStats.monthlyEmission,
                     color = Color(0xFFFFEB3B),
                     modifier = Modifier.weight(1f)
                 )
                 EnhancedCategoryCard(
                     category = "Shopping",
                     icon = "🛍️",
-                    emission = "1.8 kg CO₂",
-                    percentage = 27,
+                    emission = "${String.format("%.1f", shoppingStats.monthlyEmission)} kg CO₂",
+                    percentage = shoppingPercentage,
+                    actualEmission = shoppingStats.monthlyEmission,
                     color = Color(0xFF2196F3),
                     modifier = Modifier.weight(1f)
                 )
@@ -361,7 +400,7 @@ fun CategoriesSection(transportStats: com.app.carbonbuddy.data.TransportStats) {
                 modifier = Modifier.padding(bottom = 8.dp)
             )
             
-            WasteImpactCard()
+            WasteImpactCard(wasteStats)
         }
     }
 }
@@ -372,6 +411,7 @@ fun EnhancedCategoryCard(
     icon: String,
     emission: String,
     percentage: Int,
+    actualEmission: Double,
     color: Color,
     modifier: Modifier = Modifier
 ) {
@@ -397,7 +437,7 @@ fun EnhancedCategoryCard(
                 )
                 
                 Text(
-                    "$percentage%",
+                    "<$percentage%",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = color
@@ -436,7 +476,7 @@ fun EnhancedCategoryCard(
 }
 
 @Composable
-fun WasteImpactCard() {
+fun WasteImpactCard(wasteStats: com.app.carbonbuddy.data.WasteStats) {
     Card(
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(6.dp),
@@ -459,10 +499,14 @@ fun WasteImpactCard() {
                 )
                 
                 Text(
-                    "Net Impact: -1.2 kg CO₂",
+                    if (wasteStats.monthlyNetImpact <= 0) {
+                        "Net Impact: Saved ${String.format("%.1f", kotlin.math.abs(wasteStats.monthlyNetImpact))} kg CO₂"
+                    } else {
+                        "Net Impact: Emitted ${String.format("%.1f", wasteStats.monthlyNetImpact)} kg CO₂"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF4CAF50)
+                    color = if (wasteStats.monthlyNetImpact <= 0) Color(0xFF4CAF50) else Color(0xFFFF5722)
                 )
             }
             
@@ -478,29 +522,55 @@ fun WasteImpactCard() {
             Spacer(modifier = Modifier.height(12.dp))
             
             // Waste breakdown
-            WasteBreakdownRow(
-                icon = "♻️",
-                action = "Recycled",
-                amount = "5.2 kg",
-                impact = "-0.8 kg CO₂",
-                color = Color(0xFF4CAF50)
-            )
-            
-            WasteBreakdownRow(
-                icon = "🌱",
-                action = "Composted", 
-                amount = "3.1 kg",
-                impact = "-0.6 kg CO₂",
-                color = Color(0xFF8BC34A)
-            )
-            
-            WasteBreakdownRow(
-                icon = "🗑️",
-                action = "Landfill",
-                amount = "1.5 kg", 
-                impact = "+0.2 kg CO₂",
-                color = Color(0xFFFF5722)
-            )
+            if (wasteStats.monthlyCount > 0) {
+                WasteBreakdownRow(
+                    icon = "♻️",
+                    action = "Recycled",
+                    amount = "${String.format("%.1f", wasteStats.monthlyRecycledWeight)} kg",
+                    impact = "Saved ${String.format("%.1f", wasteStats.monthlyRecycledEmission)} kg CO₂",
+                    color = Color(0xFF4CAF50)
+                )
+                
+                WasteBreakdownRow(
+                    icon = "🌱",
+                    action = "Composted", 
+                    amount = "${String.format("%.1f", wasteStats.monthlyCompostedWeight)} kg",
+                    impact = "Saved ${String.format("%.1f", wasteStats.monthlyCompostedEmission)} kg CO₂",
+                    color = Color(0xFF8BC34A)
+                )
+                
+                WasteBreakdownRow(
+                    icon = "🗑️",
+                    action = "Landfill",
+                    amount = "${String.format("%.1f", wasteStats.monthlyLandfillWeight)} kg",
+                    impact = "Emitted ${String.format("%.1f", wasteStats.monthlyLandfillEmission)} kg CO₂",
+                    color = Color(0xFFFF5722)
+                )
+            } else {
+                WasteBreakdownRow(
+                    icon = "♻️",
+                    action = "Recycled",
+                    amount = "0.0 kg",
+                    impact = "Saved 0.0 kg CO₂",
+                    color = Color(0xFF4CAF50)
+                )
+
+                WasteBreakdownRow(
+                    icon = "🌱",
+                    action = "Composted",
+                    amount = "0.0 kg",
+                    impact = "Saved 0.0 kg CO₂",
+                    color = Color(0xFF8BC34A)
+                )
+
+                WasteBreakdownRow(
+                    icon = "🗑️",
+                    action = "Landfill",
+                    amount = "0.0 kg",
+                    impact = "Emitted 0.0 kg CO₂",
+                    color = Color(0xFFFF5722)
+                )
+            }
         }
     }
 }
@@ -550,5 +620,170 @@ fun WasteBreakdownRow(
             fontWeight = FontWeight.Bold,
             color = color
         )
+    }
+}
+
+@Composable
+fun EcoScoreSection(
+    transportStats: com.app.carbonbuddy.data.TransportStats,
+    dietStats: com.app.carbonbuddy.data.DietStats,
+    shoppingStats: com.app.carbonbuddy.data.ShoppingStats,
+    billsStats: com.app.carbonbuddy.data.BillsStats,
+    wasteStats: com.app.carbonbuddy.data.WasteStats
+) {
+    // Calculate total monthly emissions
+    val totalMonthlyEmission = transportStats.monthlyEmission + 
+                              (dietStats.monthlyEmission / 1000.0) + // Convert from grams to kg
+                              shoppingStats.monthlyEmission + 
+                              billsStats.monthlyEmission + 
+                              wasteStats.monthlyNetImpact
+    
+    // Calculate EcoScore
+    val ecoScore = EcoScoreCalculator.calculateEcoScore(totalMonthlyEmission)
+    val ecoRating = EcoScoreCalculator.getEcoRating(ecoScore)
+    val ecoColor = Color(EcoScoreCalculator.getEcoScoreColor(ecoScore))
+    val motivationalMessage = EcoScoreCalculator.getMotivationalMessage(ecoScore)
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.95f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.EmojiEvents,
+                    contentDescription = null,
+                    tint = ecoColor,
+                    modifier = Modifier.size(28.dp)
+                )
+                Text(
+                    "Your EcoScore",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2E7D32)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // EcoScore Circle
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(120.dp)
+            ) {
+                // Background Circle
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    ecoColor.copy(alpha = 0.1f),
+                                    ecoColor.copy(alpha = 0.05f)
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 4.dp,
+                            color = ecoColor,
+                            shape = CircleShape
+                        )
+                )
+                
+                // Score Text
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "${String.format("%.0f", ecoScore)}",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = ecoColor,
+                        fontSize = 32.sp
+                    )
+                    Text(
+                        "Score",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Rating Badge
+            Card(
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = ecoColor.copy(alpha = 0.1f)
+                ),
+                modifier = Modifier.padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    ecoRating,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = ecoColor,
+                    textAlign = TextAlign.Center
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Motivational Message
+            Text(
+                motivationalMessage,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color(0xFF424242),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Monthly Emission Info
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF5F5F5)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "Monthly Footprint",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.Gray
+                    )
+                    Text(
+                        "${String.format("%.1f", totalMonthlyEmission)} kg CO₂e",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF424242)
+                    )
+                    Text(
+                        "vs 550.0 kg average",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+            }
+        }
     }
 }

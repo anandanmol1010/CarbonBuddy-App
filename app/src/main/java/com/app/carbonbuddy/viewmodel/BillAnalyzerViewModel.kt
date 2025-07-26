@@ -9,6 +9,8 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.carbonbuddy.data.BillsStats
+import com.app.carbonbuddy.repository.BillsRepository
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
@@ -64,13 +66,17 @@ data class BillAnalyzerUiState(
     val detectedBillType: BillType? = null,
     val showMismatchWarning: Boolean = false,
     val showCalculateButton: Boolean = false,
-    val isAiProcessing: Boolean = false
+    val isAiProcessing: Boolean = false,
+    val showSuccessMessage: Boolean = false,
+    val stats: BillsStats = BillsStats()
 )
 
 class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
     
     private val _uiState = MutableStateFlow(BillAnalyzerUiState())
     val uiState: StateFlow<BillAnalyzerUiState> = _uiState.asStateFlow()
+    
+    private val repository = BillsRepository(context)
     
     // ML Kit Text Recognizer
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -83,9 +89,9 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
     
     // Emission factors (kg CO₂ per unit) - for reference
     private val electricityFactor = 0.82
-    private val gasFactor = 2.3
-    private val waterFactor = 0.3
-    private val internetFactor = 0.5 // kg CO₂ per GB
+    private val gasFactor = 2.5
+    private val waterFactor = 0.0005
+    private val internetFactor = 0.006 // kg CO₂ per GB
     
     fun onImageSelected(uri: Uri) {
         // Clear previous data when new image is selected
@@ -342,6 +348,22 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
                     Log.d("Anmol Anand", "=========================")
                 }
                 
+                // Save to database
+                val inputType = if (currentState.extractedText.isNotEmpty()) "OCR" else "Manual"
+                val billType = selectedType?.name ?: geminiResponse.detectedBillType?.name ?: "UNKNOWN"
+                
+                repository.saveBillsEntry(
+                    inputType = inputType,
+                    billType = billType,
+                    inputText = inputText,
+                    billData = geminiResponse.billData,
+                    emissionResult = geminiResponse.emissionResult,
+                    ecoTips = geminiResponse.ecoTips
+                )
+                
+                // Load updated stats
+                val updatedStats = repository.getBillsStats()
+                
                 _uiState.value = _uiState.value.copy(
                     isAiProcessing = false,
                     billData = geminiResponse.billData,
@@ -349,7 +371,9 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
                     ecoTips = geminiResponse.ecoTips,
                     detectedBillType = geminiResponse.detectedBillType,
                     showMismatchWarning = showMismatch,
-                    showCalculateButton = false // Hide button after calculation
+                    showCalculateButton = false, // Hide button after calculation
+                    showSuccessMessage = true,
+                    stats = updatedStats
                 )
                 
             } catch (e: Exception) {
@@ -657,6 +681,21 @@ class BillAnalyzerViewModel(private val context: Context) : ViewModel() {
             )
             Log.d("Anmol Anand", "Bill type corrected to: ${detectedType.displayName}")
         }
+    }
+    
+    fun loadStats() {
+        viewModelScope.launch {
+            try {
+                val stats = repository.getBillsStats()
+                _uiState.value = _uiState.value.copy(stats = stats)
+            } catch (e: Exception) {
+                Log.e("Bill Analyzer", "Error loading stats: ${e.message}", e)
+            }
+        }
+    }
+    
+    fun dismissSuccessMessage() {
+        _uiState.value = _uiState.value.copy(showSuccessMessage = false)
     }
     
     fun handleManualInputClick() {

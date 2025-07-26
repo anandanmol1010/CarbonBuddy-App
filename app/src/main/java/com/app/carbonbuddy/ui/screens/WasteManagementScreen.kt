@@ -26,6 +26,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import com.app.carbonbuddy.data.WasteConstants
 import com.app.carbonbuddy.viewmodel.EditableWasteItem
 import com.app.carbonbuddy.viewmodel.WasteManagementViewModel
@@ -33,8 +35,24 @@ import com.app.carbonbuddy.viewmodel.WasteManagementViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WasteManagementScreen(viewModel: WasteManagementViewModel) {
+    val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
+    
+    // Show success toast when data is saved
+    LaunchedEffect(uiState.showSuccessMessage) {
+        if (uiState.showSuccessMessage) {
+            Toast.makeText(context, "Waste data saved successfully!", Toast.LENGTH_SHORT).show()
+            viewModel.dismissSuccessMessage()
+        }
+    }
+    
+    // Clear data when user navigates away from screen
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.clearScreenData()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -113,7 +131,7 @@ fun WasteManagementScreen(viewModel: WasteManagementViewModel) {
                             onValueChange = viewModel::updateUserInput,
                             placeholder = {
                                 Text(
-                                    "Describe the waste you generated today...\nExample: I threw away a juice box, paper bag, and vegetable peels.",
+                                    "Tell me about your waste in detail...\n\nExample: \"Today I threw away 2 plastic bottles (recycled them), 1 kg food waste (composted), and some paper (put in trash)\"\n\nBe specific about quantities and how you disposed of each item!",
                                     color = Color.Gray
                                 )
                             },
@@ -253,15 +271,7 @@ fun WasteManagementScreen(viewModel: WasteManagementViewModel) {
 
                 // Detected Waste Items
                 items(uiState.editableItems) { item ->
-                    EditableWasteItemCard(
-                        item = item,
-                        onUpdateItem = { updatedItem ->
-                            viewModel.updateEditableItem(item.id, updatedItem)
-                        },
-                        onRemoveItem = {
-                            viewModel.removeEditableItem(item.id)
-                        }
-                    )
+                    WasteItemDisplayCard(item = item)
                 }
 
                 item {
@@ -296,37 +306,27 @@ fun WasteManagementScreen(viewModel: WasteManagementViewModel) {
                                             color = Color.Gray
                                         )
                                         Text(
-                                            "${String.format("%.2f", uiState.totalCO2Impact)} kg CO₂e",
+                                            if (uiState.totalCO2Impact <= 0) {
+                                                "Saved ${String.format("%.2f", kotlin.math.abs(uiState.totalCO2Impact))} kg CO₂e"
+                                            } else {
+                                                "Emitted ${String.format("%.2f", uiState.totalCO2Impact)} kg CO₂e"
+                                            },
                                             style = MaterialTheme.typography.titleLarge,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (uiState.totalCO2Impact > 0) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                                            color = if (uiState.totalCO2Impact <= 0) Color(0xFF4CAF50) else Color(0xFFD32F2F)
                                         )
                                     }
                                     
                                     Icon(
-                                        if (uiState.totalCO2Impact > 0) Icons.Default.TrendingUp else Icons.Default.TrendingDown,
+                                        if (uiState.totalCO2Impact <= 0) Icons.Default.TrendingDown else Icons.Default.TrendingUp,
                                         contentDescription = null,
-                                        tint = if (uiState.totalCO2Impact > 0) Color(0xFFD32F2F) else Color(0xFF4CAF50),
+                                        tint = if (uiState.totalCO2Impact <= 0) Color(0xFF4CAF50) else Color(0xFFD32F2F),
                                         modifier = Modifier.size(32.dp)
                                     )
                                 }
 
-                                Button(
-                                    onClick = { viewModel.confirmAndSaveWaste() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF4CAF50)
-                                    ),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Save,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Confirm & Save", fontWeight = FontWeight.SemiBold)
-                                }
+                                // Data automatically saved after AI analysis
+                                Toast.makeText(context, "Data saved successfully!", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -335,50 +335,67 @@ fun WasteManagementScreen(viewModel: WasteManagementViewModel) {
         }
     }
 
-    // Success Dialog
-    if (uiState.showSuccessDialog) {
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissSuccessDialog() },
-            title = {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = Color(0xFF4CAF50)
-                    )
-                    Text("Waste Logged Successfully!")
-                }
-            },
-            text = {
+    // Success dialog removed - data is automatically saved
+}
+
+@Composable
+fun WasteItemDisplayCard(
+    item: EditableWasteItem
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    item.category.icon,
+                    fontSize = 24.sp
+                )
                 Column {
-                    Text("Your waste entries have been saved.")
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Total Impact: ${String.format("%.2f", uiState.totalCO2Impact)} kg CO₂e",
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (uiState.totalCO2Impact > 0) Color(0xFFD32F2F) else Color(0xFF4CAF50)
+                        item.wasteType,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    if (uiState.ecoTip.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "💡 ${uiState.ecoTip}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF2E7D32)
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.dismissSuccessDialog() }
-                ) {
-                    Text("Great!", color = Color(0xFF4CAF50))
+                    Text(
+                        "${item.quantity} ${item.unit} • ${item.disposalMethod.name}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
                 }
             }
-        )
+
+            Column(
+                horizontalAlignment = Alignment.End
+            ) {
+                val isGood =
+                    item.disposalMethod.id == "RECYCLED" || item.disposalMethod.id == "COMPOSTED"
+                Text(
+                    if (isGood) "Saved" else "Emitted",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isGood) Color(0xFF4CAF50) else Color(0xFFD32F2F),
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    "${String.format("%.2f", item.estimatedCO2)} kg CO₂e",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isGood) Color(0xFF4CAF50) else Color(0xFFD32F2F)
+                )
+            }
+        }
     }
 }
 
@@ -430,7 +447,7 @@ fun EditableWasteItemCard(
                         )
                     }
                 }
-                
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -441,7 +458,7 @@ fun EditableWasteItemCard(
                         fontWeight = FontWeight.Medium,
                         color = if (item.estimatedCO2 > 0) Color(0xFFD32F2F) else Color(0xFF4CAF50)
                     )
-                    
+
                     IconButton(
                         onClick = { isExpanded = !isExpanded },
                         modifier = Modifier.size(24.dp)
@@ -466,7 +483,7 @@ fun EditableWasteItemCard(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     HorizontalDivider(color = Color(0xFFE0E0E0))
-                    
+
                     // Category Selection
                     Text(
                         "Category",
@@ -506,7 +523,7 @@ fun EditableWasteItemCard(
                             )
                         }
                     }
-                    
+
                     // Quantity Input
                     OutlinedTextField(
                         value = quantity,
@@ -529,14 +546,14 @@ fun EditableWasteItemCard(
                             focusedBorderColor = Color(0xFF4CAF50)
                         )
                     )
-                    
+
                     // Disposal Method Selection
                     Text(
                         "Disposal Method",
                         style = MaterialTheme.typography.labelMedium,
                         color = Color(0xFF2E7D32)
                     )
-                    
+
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -569,7 +586,7 @@ fun EditableWasteItemCard(
                             )
                         }
                     }
-                    
+
                     // Remove Button
                     OutlinedButton(
                         onClick = onRemoveItem,

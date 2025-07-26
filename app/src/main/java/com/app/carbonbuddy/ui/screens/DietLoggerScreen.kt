@@ -22,17 +22,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.app.carbonbuddy.viewmodel.DietLoggerViewModel
 import com.app.carbonbuddy.viewmodel.DietAnalysisResult
 import com.app.carbonbuddy.viewmodel.DietItem
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DietLoggerScreen(
-    viewModel: DietLoggerViewModel = viewModel()
-) {
+fun DietLoggerScreen() {
+    val context = LocalContext.current
+    val viewModel: DietLoggerViewModel = viewModel { DietLoggerViewModel(context) }
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Success Message Toast
+    if (uiState.showSuccessMessage) {
+        Toast.makeText(context, "Meal data saved successfully!", Toast.LENGTH_SHORT).show()
+        viewModel.dismissSuccessMessage()
+    }
     
     LazyColumn(
         modifier = Modifier

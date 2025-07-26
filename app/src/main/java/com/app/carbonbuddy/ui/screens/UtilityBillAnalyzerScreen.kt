@@ -27,6 +27,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import android.widget.Toast
 import com.app.carbonbuddy.viewmodel.BillAnalyzerViewModel
 import com.app.carbonbuddy.viewmodel.BillData
 import com.app.carbonbuddy.viewmodel.BillType
@@ -39,6 +40,14 @@ fun UtilityBillAnalyzerScreen() {
         BillAnalyzerViewModel(context)
     }
     val uiState by viewModel.uiState.collectAsState()
+    
+    // Show success toast when data is saved
+    LaunchedEffect(uiState.showSuccessMessage) {
+        if (uiState.showSuccessMessage) {
+            Toast.makeText(context, "Bill data saved successfully!", Toast.LENGTH_SHORT).show()
+            viewModel.dismissSuccessMessage()
+        }
+    }
     
     // Store temp URI for camera
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }

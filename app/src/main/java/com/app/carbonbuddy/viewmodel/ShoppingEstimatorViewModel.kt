@@ -9,6 +9,8 @@ import android.provider.MediaStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.app.carbonbuddy.data.ShoppingStats
+import com.app.carbonbuddy.repository.ShoppingRepository
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -40,7 +42,9 @@ data class ShoppingEstimatorUiState(
     val totalEmission: Double = 0.0,
     val shoppingItems: List<ShoppingItem> = emptyList(),
     val ecoTips: List<String> = emptyList(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val showSuccessMessage: Boolean = false,
+    val stats: ShoppingStats = ShoppingStats()
 )
 
 class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
@@ -48,6 +52,7 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
     private val _uiState = MutableStateFlow(ShoppingEstimatorUiState())
     val uiState: StateFlow<ShoppingEstimatorUiState> = _uiState.asStateFlow()
     
+    private val repository = ShoppingRepository(context)
     private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     
     private val geminiModel = GenerativeModel(
@@ -196,16 +201,31 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
                 Log.d("Shopping Estimator", "Gemini response: $responseText")
                 
                 val analysisResult = parseGeminiResponse(responseText)
-                
-                _uiState.value = _uiState.value.copy(
-                    isAiProcessing = false,
-                    totalEmission = analysisResult.totalEmission,
-                    shoppingItems = analysisResult.items,
-                    ecoTips = analysisResult.ecoTips,
-                    showCalculateButton = false
-                )
-                
-                Log.d("Shopping Estimator", "Analysis complete. Total emission: ${analysisResult.totalEmission} kg CO₂")
+            
+            // Save to database
+            val inputType = if (_uiState.value.showManualInput) "Manual" else "OCR"
+            repository.saveShoppingEntry(
+                inputType = inputType,
+                inputText = inputText,
+                totalEmission = analysisResult.totalEmission,
+                items = analysisResult.items,
+                ecoTips = analysisResult.ecoTips
+            )
+            
+            // Load updated stats
+            val updatedStats = repository.getShoppingStats()
+            
+            _uiState.value = _uiState.value.copy(
+                isAiProcessing = false,
+                totalEmission = analysisResult.totalEmission,
+                shoppingItems = analysisResult.items,
+                ecoTips = analysisResult.ecoTips,
+                showCalculateButton = false,
+                showSuccessMessage = true,
+                stats = updatedStats
+            )
+            
+            Log.d("Shopping Estimator", "Analysis complete and saved. Total emission: ${analysisResult.totalEmission} kg CO₂")
                 
             } catch (e: Exception) {
                 Log.e("Shopping Estimator", "Error calculating emissions: ${e.message}", e)
@@ -244,15 +264,24 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
         }
     }
     
+    fun loadStats() {
+        viewModelScope.launch {
+            try {
+                val stats = repository.getShoppingStats()
+                _uiState.value = _uiState.value.copy(stats = stats)
+            } catch (e: Exception) {
+                Log.e("Shopping Estimator", "Error loading stats: ${e.message}", e)
+            }
+        }
+    }
+    
+    fun dismissSuccessMessage() {
+        _uiState.value = _uiState.value.copy(showSuccessMessage = false)
+    }
+    
     // Receipt validation removed - now handled by Gemini AI
     
     // Manual validation removed - now handled by Gemini AI
-    
-    // Gemini AI Integration
-    // private val geminiModel = GenerativeModel(
-    //     modelName = "gemini-2.0-flash-exp",
-    //     apiKey = "AIzaSyDGJJQMVXaGMjKJfOJKNOJKNOJKNOJKNOJ" // Replace with your actual API key
-    // )
     
     private fun createGeminiPrompt(inputText: String, isManualInput: Boolean): String {
         return """
@@ -269,55 +298,47 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
             
             **EXACT EMISSION FACTORS** (kg CO₂ per item - USE THESE EXACT VALUES):
             
-            **CLOTHING:**
-            - T-shirt/Top: 5.5
-            - Jeans/Pants: 33.4
-            - Shoes/Footwear: 14.0
-            - Jacket/Coat: 25.0
-            - Dress: 15.8
-            - Shirt: 6.2
-            - Sweater: 18.5
-            - Underwear: 2.1
-            - Socks: 1.8
+            **CLOTHING & TEXTILES:**
+            - Cotton T-shirt: 8.5 | Polyester T-shirt: 5.5 | Cotton Shirt: 12.3 | Silk Shirt: 18.7
+            - Denim Jeans: 33.4 | Cotton Trousers: 15.8 | Cotton Dress: 22.5
+            - Wool Sweater: 45.6 | Cotton Sweater: 28.3 | Leather Jacket: 89.5 | Denim Jacket: 42.8
+            - Silk Saree: 45.8 | Cotton Saree: 18.3 | Cotton Kurta: 14.2 | Silk Kurta: 28.5
+            - Cotton Salwar: 11.8 | Cotton Dupatta: 6.5 | Cotton Underwear: 2.1 | Cotton Bra: 3.8
+            - Cotton Socks: 1.9 | Wool Socks: 4.2 | Cotton Pajamas: 8.9 | Silk Nightwear: 18.5
             
-            **ELECTRONICS:**
-            - Smartphone: 85.0
-            - Laptop: 350.0
-            - Tablet: 130.0
-            - Headphones: 15.0
-            - Charger: 8.0
-            - TV: 500.0
-            - Watch: 25.0
-            - Camera: 120.0
+            **FOOTWEAR:**
+            - Leather Formal Shoes: 19.2 | Canvas Sneakers: 14.0 | Leather Sneakers: 16.8
+            - Running Shoes: 18.3 | Leather Sandals: 12.5 | Rubber Flip-flops: 3.8
+            - Leather Boots: 28.4 | High Heels: 22.1 | Leather Flats: 15.3 | Sports Shoes: 19.8
+            - Crocs: 5.2 | Home Slippers: 2.1
             
-            **HOME & FURNITURE:**
-            - Bed: 180.0
-            - Pillow: 12.0
-            - Bedsheet: 8.5
-            - Blanket: 15.0
-            - Chair: 45.0
-            - Table: 85.0
-            - Lamp: 18.0
-            - Curtains: 22.0
-            - Towel: 6.8
+            **ELECTRONICS & APPLIANCES:**
+            - Basic Smartphone: 89.5 | Premium Smartphone: 156.8 | 7" Tablet: 145.2 | 10" Tablet: 189.7
+            - Basic Laptop: 450.2 | Gaming Laptop: 789.5 | Desktop PC: 623.8
+            - 24" Monitor: 234.5 | 32" Monitor: 356.7 | 32" LED TV: 320.5 | 43" LED TV: 445.3
+            - 55" LED TV: 612.8 | 55" OLED TV: 798.4 | Single Door Fridge: 892.3 | Double Door Fridge: 1245.7
+            - Semi-Auto Washing Machine: 456.2 | Auto Washing Machine: 542.3 | Microwave: 234.8
+            - 1 Ton AC: 678.9 | 1.5 Ton AC: 823.4 | Ceiling Fan: 45.6 | Table Fan: 28.3
+            - Mixer Grinder: 67.8 | Electric Kettle: 23.4 | Rice Cooker: 34.5 | Iron: 18.7
+            - Hair Dryer: 12.8 | Vacuum Cleaner: 89.4 | Electric Razor: 23.4
             
-            **FOOD (per kg):**
-            - Beef: 27.0
-            - Chicken: 6.9
-            - Fish: 5.4
-            - Rice: 2.7
-            - Vegetables: 2.0
-            - Fruits: 1.1
-            - Milk: 3.2
-            - Bread: 0.9
-            - Cheese: 13.5
+            **PERSONAL CARE:**
+            - Shampoo 250ml: 0.85 | Shampoo 500ml: 1.42 | Conditioner 250ml: 0.92 | Body Wash 250ml: 0.78
+            - Soap Bar: 0.42 | Face Wash 100ml: 0.65 | Moisturizer 100ml: 0.89 | Sunscreen 100ml: 1.12
+            - Toothpaste 100g: 0.73 | Toothbrush: 0.18 | Mouthwash 250ml: 0.54
+            - Deodorant Spray: 1.25 | Deodorant Roll: 0.98 | Perfume 50ml: 2.34 | Cologne 100ml: 3.45
+            - Lipstick: 0.67 | Foundation: 1.23 | Mascara: 0.89 | Eyeliner: 0.45 | Nail Polish: 0.34
+            - Shaving Cream: 0.76 | Disposable Razor: 0.12
             
-            **OTHER:**
-            - Books: 2.5
-            - Toys: 8.0
-            - Cosmetics: 4.0
-            - Cleaning products: 3.0
-            - Bags: 12.0
+            **HOUSEHOLD ITEMS:**
+            - Detergent Powder 1kg: 2.1 | Detergent Liquid 1L: 2.3 | Fabric Softener 1L: 1.8
+            - Dish Soap 500ml: 0.89 | Floor Cleaner 1L: 1.45 | Toilet Cleaner 500ml: 1.23
+            - Glass Cleaner 500ml: 0.98 | Air Freshener: 1.56 | Toilet Paper 4-roll: 3.8
+            - Tissue Paper 100-sheet: 1.2 | Kitchen Towel: 0.95 | Aluminum Foil: 2.3 | Cling Wrap: 1.8
+            - Garbage Bags 30pc: 1.2 | Plastic Container Set: 4.5 | Glass Container Set: 6.8
+            - Steel Utensils Set: 12.3 | Non-stick Pan: 8.9 | Pressure Cooker 3L: 15.4
+            - Dinner Plates Set: 7.6 | Cotton Bed Sheets: 12.8 | Cotton Pillow: 4.5
+            - Cotton Blanket: 18.7 | Cotton Curtains: 15.3
             
             **RESPONSE FORMAT** (JSON only):
             {
@@ -325,9 +346,9 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
                 "totalEmission": 45.2,
                 "items": [
                     {
-                        "name": "Blue T-shirt",
+                        "name": "Cotton T-shirt",
                         "category": "Clothing",
-                        "co2Emission": 5.5,
+                        "co2Emission": 8.5,
                         "icon": "👕"
                     }
                 ],
@@ -336,12 +357,13 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
                     "Buy local products",
                     "Consider second-hand items",
                     "Look for energy-efficient electronics",
-                    "Reduce meat consumption"
+                    "Reduce plastic packaging"
                 ]
             }
             
             **CRITICAL INSTRUCTIONS**:
             - Use EXACT emission factors from above - NO estimates or approximations
+            - Match closest item from database (e.g., "blue t-shirt" → "Cotton T-shirt: 8.5")
             - Skip tax, shipping, discounts, store info, payment details
             - If no actual products found, return: {"isValid": false, "error": "No shopping products detected"}
             - Return ONLY valid JSON

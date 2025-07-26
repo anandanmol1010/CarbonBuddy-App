@@ -31,9 +31,9 @@ class TransportTrackerViewModel(context: Context) : ViewModel() {
     // Transport modes with emission factors (kg CO2 per km)
     private val emissionFactors = mapOf(
         "Car" to 0.192,
-        "Bus" to 0.105,
-        "Motorbike" to 0.089,
-        "Train" to 0.041
+        "Bus" to 0.089,
+        "Motorbike" to 0.084,
+        "Train" to 0.035
     )
     
     init {

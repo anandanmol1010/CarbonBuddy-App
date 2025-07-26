@@ -1,6 +1,80 @@
 package com.app.carbonbuddy.data
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
 import androidx.compose.ui.graphics.Color
+import java.text.SimpleDateFormat
+import java.util.*
+
+@Entity(tableName = "waste_entries")
+data class WasteEntry(
+    @PrimaryKey(autoGenerate = true)
+    val id: Long = 0,
+    val inputType: String, // "AI" or "Manual"
+    val inputText: String, // Original input text
+    val recycledWeight: Double,
+    val recycledEmission: Double, // Negative for savings
+    val compostedWeight: Double,
+    val compostedEmission: Double, // Negative for savings
+    val landfillWeight: Double,
+    val landfillEmission: Double, // Positive for emissions
+    val netImpact: Double, // Sum of all three emissions
+    val dateString: String,
+    val dayOfMonth: Int,
+    val month: Int,
+    val year: Int,
+    val weekOfYear: Int,
+    val timestamp: Long = System.currentTimeMillis()
+) {
+    companion object {
+        fun create(
+            inputType: String,
+            inputText: String,
+            recycledWeight: Double,
+            recycledEmission: Double,
+            compostedWeight: Double,
+            compostedEmission: Double,
+            landfillWeight: Double,
+            landfillEmission: Double
+        ): WasteEntry {
+            val calendar = Calendar.getInstance()
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            
+            return WasteEntry(
+                inputType = inputType,
+                inputText = inputText,
+                recycledWeight = recycledWeight,
+                recycledEmission = recycledEmission,
+                compostedWeight = compostedWeight,
+                compostedEmission = compostedEmission,
+                landfillWeight = landfillWeight,
+                landfillEmission = landfillEmission,
+                netImpact = landfillEmission - recycledEmission - compostedEmission, // Net = Emitted - Saved
+                dateString = dateFormat.format(calendar.time),
+                dayOfMonth = calendar.get(Calendar.DAY_OF_MONTH),
+                month = calendar.get(Calendar.MONTH) + 1,
+                year = calendar.get(Calendar.YEAR),
+                weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR)
+            )
+        }
+    }
+}
+
+data class WasteStats(
+    val todayNetImpact: Double = 0.0,
+    val weeklyNetImpact: Double = 0.0,
+    val monthlyNetImpact: Double = 0.0,
+    val todayCount: Int = 0,
+    val weeklyCount: Int = 0,
+    val monthlyCount: Int = 0,
+    // Individual category breakdown
+    val monthlyRecycledWeight: Double = 0.0,
+    val monthlyRecycledEmission: Double = 0.0,
+    val monthlyCompostedWeight: Double = 0.0,
+    val monthlyCompostedEmission: Double = 0.0,
+    val monthlyLandfillWeight: Double = 0.0,
+    val monthlyLandfillEmission: Double = 0.0
+)
 
 data class WasteCategory(
     val id: String,
@@ -14,16 +88,6 @@ data class DisposalMethod(
     val name: String,
     val icon: String,
     val description: String
-)
-
-data class WasteEntry(
-    val id: String = "",
-    val category: WasteCategory,
-    val disposalMethod: DisposalMethod,
-    val quantity: Double,
-    val unit: String,
-    val emission: Double,
-    val timestamp: Long = System.currentTimeMillis()
 )
 
 object WasteConstants {

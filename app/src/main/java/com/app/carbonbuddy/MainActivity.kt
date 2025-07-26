@@ -32,11 +32,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.app.carbonbuddy.ui.screens.*
 import com.app.carbonbuddy.ui.screens.ShoppingTrackerScreen
-import com.app.carbonbuddy.viewmodel.WasteTrackerViewModel
+
 import com.app.carbonbuddy.viewmodel.WasteManagementViewModel
 import androidx.compose.ui.platform.LocalContext
+import com.app.carbonbuddy.utils.PreferencesManager
 
 sealed class Screen(val route: String, val label: String, val icon: String) {
+    object Splash : Screen("splash", "Splash", "🌱")
     object Home : Screen("home_dashboard", "Home", "🏠")
     object Transport : Screen("transport_tracker", "Transport", "🚗")
     object Diet : Screen("diet_logger", "Diet", "🥗")
@@ -63,17 +65,48 @@ class MainActivity : ComponentActivity() {
             CarbonBuddyTheme {
                 val navController = rememberNavController()
                 val context = LocalContext.current
-                val wasteViewModel = remember { WasteTrackerViewModel() }
+                val preferencesManager = remember { PreferencesManager(context) }
                 val wasteManagementViewModel = remember { WasteManagementViewModel(context) }
+                
+                // Check if it's first time launch
+                val isFirstTime = remember { preferencesManager.isFirstTimeLaunch() }
+                val startDestination = if (isFirstTime) Screen.Onboarding.route else Screen.Splash.route
+                
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    bottomBar = { BottomNavBar(navController) }
+                    bottomBar = { 
+                        // Hide bottom bar on splash and onboarding screens
+                        val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+                        if (currentRoute != Screen.Splash.route && currentRoute != Screen.Onboarding.route) {
+                            BottomNavBar(navController)
+                        }
+                    }
                 ) { innerPadding ->
                     NavHost(
                         navController = navController,
-                        startDestination = Screen.Home.route,
+                        startDestination = startDestination,
                         modifier = Modifier.fillMaxSize()
                     ) {
+                        composable(Screen.Splash.route) {
+                            SplashScreen(
+                                onSplashFinished = {
+                                    // After splash, always go to home (since splash only shows for returning users)
+                                    navController.navigate(Screen.Home.route) {
+                                        popUpTo(Screen.Splash.route) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+                        composable(Screen.Onboarding.route) {
+                            OnboardingScreen(
+                                onFinish = {
+                                    preferencesManager.setFirstTimeLaunchCompleted()
+                                    navController.navigate(Screen.Home.route) {
+                                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                         composable(Screen.Home.route) { HomeDashboardScreen() }
                         composable(Screen.Transport.route) { TransportTrackerScreen() }
                         composable(Screen.Diet.route) { DietLoggerScreen() }
