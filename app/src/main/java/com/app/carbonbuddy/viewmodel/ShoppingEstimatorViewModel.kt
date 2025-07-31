@@ -362,8 +362,19 @@ class ShoppingEstimatorViewModel(private val context: Context) : ViewModel() {
             }
             
             **CRITICAL INSTRUCTIONS**:
-            - Use EXACT emission factors from above - NO estimates or approximations
-            - Match closest item from database (e.g., "blue t-shirt" → "Cotton T-shirt: 8.5")
+            - **FIRST PRIORITY**: Use EXACT emission factors from above database if product found
+            - **IF EXACT MATCH FOUND**: Use the exact value (e.g., "blue t-shirt" → "Cotton T-shirt: 8.5")
+            - **IF NO EXACT MATCH**: Use the database as REFERENCE and estimate based on similar products:
+              * Similar clothing items → use average of clothing values
+              * Similar electronics → use average of electronics values
+              * Similar personal care → use average of personal care values
+              * Similar household items → use average of household values
+            - **EXAMPLES OF ESTIMATION**:
+              * "Nike T-shirt" (not in database) → use Cotton T-shirt: 8.5 (similar clothing)
+              * "Adidas Shoes" (not in database) → use Running Shoes: 18.3 (similar footwear)
+              * "iPhone 15" (not in database) → use Premium Smartphone: 156.8 (similar electronics)
+              * "Samsung TV 50 inch" (not in database) → use 55" LED TV: 612.8 (similar size TV)
+              * "Dove Shampoo" (not in database) → use Shampoo 250ml: 0.85 (similar personal care)
             - Skip tax, shipping, discounts, store info, payment details
             - If no actual products found, return: {"isValid": false, "error": "No shopping products detected"}
             - Return ONLY valid JSON

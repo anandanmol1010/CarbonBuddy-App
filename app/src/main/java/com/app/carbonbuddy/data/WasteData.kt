@@ -49,7 +49,7 @@ data class WasteEntry(
                 compostedEmission = compostedEmission,
                 landfillWeight = landfillWeight,
                 landfillEmission = landfillEmission,
-                netImpact = landfillEmission - recycledEmission - compostedEmission, // Net = Emitted - Saved
+                netImpact = landfillEmission + recycledEmission + compostedEmission, // Net = Sum of all (recycled/composted are already negative)
                 dateString = dateFormat.format(calendar.time),
                 dayOfMonth = calendar.get(Calendar.DAY_OF_MONTH),
                 month = calendar.get(Calendar.MONTH) + 1,
@@ -110,46 +110,46 @@ object WasteConstants {
     )
 
     val emissionFactors = mapOf(
-        // Plastic
-        "PLASTIC_RECYCLED" to 0.6,
-        "PLASTIC_LANDFILL" to 2.5,
-        "PLASTIC_COMPOSTED" to 0.0,
-        "PLASTIC_INCINERATED" to 1.8,
+        // Plastic - Recycling saves CO₂ (negative), Landfill emits CO₂ (positive)
+        "PLASTIC_RECYCLED" to -0.6,   // CO₂ SAVED
+        "PLASTIC_LANDFILL" to 2.5,    // CO₂ EMITTED
+        "PLASTIC_COMPOSTED" to -0.2,  // CO₂ SAVED (small amount)
+        "PLASTIC_INCINERATED" to 1.8, // CO₂ EMITTED
         // Paper
-        "PAPER_RECYCLED" to 0.4,
-        "PAPER_LANDFILL" to 1.8,
-        "PAPER_COMPOSTED" to 0.3,
-        "PAPER_INCINERATED" to 1.2,
+        "PAPER_RECYCLED" to -0.8,     // CO₂ SAVED
+        "PAPER_LANDFILL" to 1.8,      // CO₂ EMITTED
+        "PAPER_COMPOSTED" to -0.3,    // CO₂ SAVED
+        "PAPER_INCINERATED" to 1.2,   // CO₂ EMITTED
         // Food
-        "FOOD_RECYCLED" to 0.0,
-        "FOOD_LANDFILL" to 1.5,
-        "FOOD_COMPOSTED" to 0.3,
-        "FOOD_INCINERATED" to 0.8,
+        "FOOD_RECYCLED" to 0.0,       // Not applicable
+        "FOOD_LANDFILL" to 1.5,       // CO₂ EMITTED
+        "FOOD_COMPOSTED" to -0.4,     // CO₂ SAVED
+        "FOOD_INCINERATED" to 0.8,    // CO₂ EMITTED
         // Glass
-        "GLASS_RECYCLED" to 0.2,
-        "GLASS_LANDFILL" to 1.0,
-        "GLASS_COMPOSTED" to 0.0,
-        "GLASS_INCINERATED" to 0.5,
+        "GLASS_RECYCLED" to -0.3,     // CO₂ SAVED
+        "GLASS_LANDFILL" to 1.0,      // CO₂ EMITTED
+        "GLASS_COMPOSTED" to 0.0,     // Not applicable
+        "GLASS_INCINERATED" to 0.5,   // CO₂ EMITTED
         // Metal
-        "METAL_RECYCLED" to 0.3,
-        "METAL_LANDFILL" to 2.0,
-        "METAL_COMPOSTED" to 0.0,
-        "METAL_INCINERATED" to 1.5,
+        "METAL_RECYCLED" to -1.2,     // CO₂ SAVED (high savings)
+        "METAL_LANDFILL" to 2.0,      // CO₂ EMITTED
+        "METAL_COMPOSTED" to 0.0,     // Not applicable
+        "METAL_INCINERATED" to 1.5,   // CO₂ EMITTED
         // Electronic
-        "ELECTRONIC_RECYCLED" to 0.5,
-        "ELECTRONIC_LANDFILL" to 3.0,
-        "ELECTRONIC_COMPOSTED" to 0.0,
-        "ELECTRONIC_INCINERATED" to 2.5,
+        "ELECTRONIC_RECYCLED" to -1.5, // CO₂ SAVED (high savings)
+        "ELECTRONIC_LANDFILL" to 3.0,  // CO₂ EMITTED (high emissions)
+        "ELECTRONIC_COMPOSTED" to 0.0, // Not applicable
+        "ELECTRONIC_INCINERATED" to 2.5, // CO₂ EMITTED
         // Textile
-        "TEXTILE_RECYCLED" to 0.4,
-        "TEXTILE_LANDFILL" to 1.8,
-        "TEXTILE_COMPOSTED" to 0.0,
-        "TEXTILE_INCINERATED" to 1.2,
+        "TEXTILE_RECYCLED" to -0.5,   // CO₂ SAVED
+        "TEXTILE_LANDFILL" to 1.8,    // CO₂ EMITTED
+        "TEXTILE_COMPOSTED" to -0.2,  // CO₂ SAVED (small amount)
+        "TEXTILE_INCINERATED" to 1.2, // CO₂ EMITTED
         // Other
-        "OTHER_RECYCLED" to 0.5,
-        "OTHER_LANDFILL" to 2.0,
-        "OTHER_COMPOSTED" to 0.0,
-        "OTHER_INCINERATED" to 1.5
+        "OTHER_RECYCLED" to -0.4,     // CO₂ SAVED
+        "OTHER_LANDFILL" to 2.0,      // CO₂ EMITTED
+        "OTHER_COMPOSTED" to -0.2,    // CO₂ SAVED
+        "OTHER_INCINERATED" to 1.5    // CO₂ EMITTED
     )
 
     fun calculateEmission(category: String, disposal: String, quantity: Double): Double {

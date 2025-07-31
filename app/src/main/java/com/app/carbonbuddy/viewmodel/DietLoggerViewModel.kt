@@ -239,12 +239,22 @@ class DietLoggerViewModel(context: Context) : ViewModel() {
             }
             
             **CRITICAL INSTRUCTIONS:**
-            - Use EXACT emission factors from above - NO estimates
-            - Calculate: (emission_factor_per_kg * serving_weight_kg) * 1000 for grams
-            - Match closest item from database (e.g., "white rice" → "White Rice: 4000")
+            - **FIRST PRIORITY**: Use EXACT emission factors from above database if item found
+            - **IF EXACT MATCH FOUND**: Use the exact value (e.g., "white rice" → "White Rice: 4000")
+            - **IF NO EXACT MATCH**: Use the database as REFERENCE and estimate based on similar items:
+              * Similar grains → use average of grain values
+              * Similar vegetables → use average of vegetable values
+              * Similar proteins → use average of protein values
+              * Similar processed foods → use average of processed food values
+            - **CALCULATION**: (emission_factor_per_kg * serving_weight_kg) * 1000 for grams
+            - **EXAMPLES OF ESTIMATION**:
+              * "Jowar" (not in database) → use Millet: 800 (similar grain)
+              * "Rajma" (not in database) → use Kidney Beans: 2800 (same item)
+              * "Palak" (not in database) → use Spinach: 2000 (same item)
+              * "Aloo Gobi" → Potato: 500 + Cauliflower: 700 (combination)
             - Extract only actual food items, ignore cooking methods
             - Return ONLY valid JSON
-            - If unclear, return: {"isValid": false, "error": "Please provide clearer meal description"}
+            - If completely unclear, return: {"isValid": false, "error": "Please provide clearer meal description"}
         """.trimIndent()
     }
     
@@ -252,7 +262,7 @@ class DietLoggerViewModel(context: Context) : ViewModel() {
         try {
             Log.d("Diet Logger", "Raw Gemini response: $response")
             
-            // Handle markdown code block
+            // Handle markdown code block2
             val trimmedResponse = response.trim()
             val cleanedResponse = if (trimmedResponse.startsWith("```json") && trimmedResponse.endsWith("```")) {
                 Log.d("Diet Logger", "Response is a markdown code block, removing block indicators.")

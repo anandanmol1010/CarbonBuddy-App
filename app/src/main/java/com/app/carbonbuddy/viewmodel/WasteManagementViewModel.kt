@@ -177,6 +177,7 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
             - Flat Screen TVs: Landfill +89.4 | Recycle -267.8 | Refurbish -445.3
             - Batteries Lithium: Landfill +8.9 | Recycle -12.4 (per kg)
             - Mobile Chargers: Landfill +3.4 | Recycle -8.9
+
             
             **RESPONSE FORMAT** (JSON only):
             {
@@ -198,10 +199,25 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
             }
             
             **CRITICAL INSTRUCTIONS:**
-            - Use EXACT emission factors from above - NO estimates
-            - Calculate: (emission_factor_per_kg * weight_kg) for total CO₂
-            - Match closest item from database (e.g., "water bottle" → "PET Bottles")
-            - Negative values = CO₂ saved, Positive values = CO₂ emitted
+            - **FIRST PRIORITY**: Use EXACT emission factors from above database if waste item found
+            - **IF EXACT MATCH FOUND**: Use the exact value (e.g., "water bottle" → "PET Bottles")
+            - **IF NO EXACT MATCH**: Use the database as REFERENCE and estimate based on similar waste items:
+              * Similar organic waste → use average of organic values
+              * Similar paper products → use average of paper values
+              * Similar plastic items → use average of plastic values
+              * Similar metal items → use average of metal values
+              * Similar glass items → use average of glass values
+              * Similar textile items → use average of textile values
+              * Similar electronic items → use average of electronic values
+            - **CALCULATION**: (emission_factor_per_kg * weight_kg) for total CO₂
+            - **EXAMPLES OF ESTIMATION**:
+              * "Coke bottle" (not in database) → use PET Bottles (similar plastic)
+              * "Old jeans" (not in database) → use Denim Clothing (similar textile)
+              * "iPhone box" (not in database) → use Cardboard Mixed (similar paper)
+              * "Aluminum tray" (not in database) → use Aluminum Foil (similar metal)
+              * "Wine bottle" (not in database) → use Clear Glass Bottles (similar glass)
+              * "Banana peel" (not in database) → use Fruit Peels (similar organic)
+            - **Negative values** = CO₂ saved, **Positive values** = CO₂ emitted
             - Return ONLY valid JSON
         """.trimIndent()
     }
@@ -244,14 +260,14 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
                     val disposalId = itemObj.optString("suggestedDisposal", "LANDFILL")
                     val description = itemObj.optString("description", "")
                     
-                    // Find category and disposal method
+                    // Use AI provided CO2 value directly (no local calculation)
+                    val estimatedCO2 = itemObj.optDouble("estimatedCO2", 0.0)
+                    
+                    // Find category and disposal method for UI display only
                     val category = WasteConstants.categories.find { it.id == categoryId } 
                         ?: WasteConstants.categories.first()
                     val disposal = WasteConstants.disposalMethods.find { it.id == disposalId } 
                         ?: WasteConstants.disposalMethods.first()
-                    
-                    // Calculate CO2 using our constants (always positive)
-                    val estimatedCO2 = WasteConstants.calculateEmission(categoryId, disposalId, quantity)
                     
                     val wasteItem = EditableWasteItem(
                         wasteType = wasteType,
@@ -268,20 +284,13 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
             
             // If no items detected, create a fallback
             if (detectedItems.isEmpty()) {
-                detectedItems.add(createWasteItem("General Waste", "OTHER", 1.0, "LANDFILL"))
+                detectedItems.add(createWasteItem("General Waste", "OTHER", 1.0, "LANDFILL", 2.0))
             }
             
-            // Calculate total CO2 impact with proper logic
-            val recycledItems = detectedItems.filter { it.disposalMethod.id == "RECYCLED" }
-            val compostedItems = detectedItems.filter { it.disposalMethod.id == "COMPOSTED" }
-            val landfillItems = detectedItems.filter { it.disposalMethod.id == "LANDFILL" || it.disposalMethod.id == "INCINERATED" }
-            
-            val recycledEmission = recycledItems.sumOf { it.estimatedCO2 } // Positive (saved)
-            val compostedEmission = compostedItems.sumOf { it.estimatedCO2 } // Positive (saved)
-            val landfillEmission = landfillItems.sumOf { it.estimatedCO2 } // Positive (emitted)
-            
-            // Net Impact = Emitted - Saved
-            val totalCO2Impact = landfillEmission - recycledEmission - compostedEmission
+            // Calculate total CO2 impact - values already have correct signs
+            // Recycled/Composted items have NEGATIVE values (CO₂ saved)
+            // Landfill/Incinerated items have POSITIVE values (CO₂ emitted)
+            val totalCO2Impact = detectedItems.sumOf { it.estimatedCO2 }
             
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
@@ -307,7 +316,7 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
         }
     }
     
-    private fun createWasteItem(wasteType: String, categoryId: String, quantity: Double, disposalId: String): EditableWasteItem {
+    private fun createWasteItem(wasteType: String, categoryId: String, quantity: Double, disposalId: String, estimatedCO2: Double = 0.0): EditableWasteItem {
         val category = WasteConstants.categories.find { it.id == categoryId } ?: WasteConstants.categories.first()
         val disposal = WasteConstants.disposalMethods.find { it.id == disposalId } ?: WasteConstants.disposalMethods.first()
         
@@ -316,7 +325,7 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
             category = category,
             quantity = quantity,
             disposalMethod = disposal,
-            estimatedCO2 = WasteConstants.calculateEmission(categoryId, disposalId, quantity),
+            estimatedCO2 = estimatedCO2, // Use provided value instead of calculating
             description = "Detected from your description"
         )
     }
@@ -334,10 +343,10 @@ class WasteManagementViewModel(private val context: Context) : ViewModel() {
                 val landfillItems = items.filter { it.disposalMethod.id == "LANDFILL" || it.disposalMethod.id == "INCINERATED" }
                 
                 val recycledWeight = recycledItems.sumOf { it.quantity }
-                val recycledEmission = recycledItems.sumOf { it.estimatedCO2 } // Positive value (CO₂ saved)
+                val recycledEmission = recycledItems.sumOf { it.estimatedCO2 } // Negative value (CO₂ saved)
                 
                 val compostedWeight = compostedItems.sumOf { it.quantity }
-                val compostedEmission = compostedItems.sumOf { it.estimatedCO2 } // Positive value (CO₂ saved)
+                val compostedEmission = compostedItems.sumOf { it.estimatedCO2 } // Negative value (CO₂ saved)
                 
                 val landfillWeight = landfillItems.sumOf { it.quantity }
                 val landfillEmission = landfillItems.sumOf { it.estimatedCO2 } // Positive value (CO₂ emitted)
